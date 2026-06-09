@@ -32,7 +32,7 @@ def set_angle(channel, angle):
 
     corrected_angle = angle + offset
 
-    # Safety clamp
+    # Bride de sécurité
     corrected_angle = max(0, min(180, corrected_angle))
 
     s = get_servo(channel)
