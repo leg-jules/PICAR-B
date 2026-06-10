@@ -1,27 +1,105 @@
 #!/usr/bin/env python3
+
 from gpiozero import TonalBuzzer
 from gpiozero.tones import Tone
-from time import sleep
 import mido
 
-tb = TonalBuzzer(18, octaves=4)
 
-def play_midi(midi_file_path):
-    mid = mido.MidiFile(midi_file_path)
-    print("Lecture du fichier bridée entre 220Hz et 880Hz...")
+class MidiBuzzer:
+    def __init__(self, pin=18, octaves=4, min_frequency=220, max_frequency=880):
+        """
+        Classe permettant de jouer des notes MIDI avec un buzzer branché sur un GPIO.
 
-    for msg in mid.play():
-        if msg.type == 'note_on' and msg.velocity > 0:
-            note = msg.note
+        Args:
+            pin (int): Numéro du pin GPIO sur lequel le buzzer est branché.
+            octaves (int): Nombre d'octaves gérées par TonalBuzzer.
+            min_frequency (float): Fréquence minimale autorisée, en Hz.
+            max_frequency (float): Fréquence maximale autorisée, en Hz.
+        """
+        # On sauvegarde les paramètres dans l'objet pour pouvoir les réutiliser ailleurs.
+        self.pin = pin
+        self.octaves = octaves
+        self.min_frequency = min_frequency
+        self.max_frequency = max_frequency
 
-            # Calcul de la fréquence
-            frequency = 440 * (2 ** (((note - 69) / 12) -0.5))
-            tb.play(Tone(frequency=frequency))
-                
-        elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
-            tb.stop()
+        # Création du buzzer tonal sur le pin GPIO choisi.
+        self.buzzer = TonalBuzzer(pin, octaves=octaves)
+
+    def note_to_frequency(self, note):
+        """
+        Convertit un numéro de note MIDI en fréquence.
+
+        La formule de base utilise la note MIDI 69 comme référence, qui correspond à 440 Hz.
+        Le -0.5 garde le même comportement de transposition que dans ton fichier original.
+        """
+        frequency = 440 * (2 ** (((note - 69) / 12) - 0.5))
+
+        # On limite la fréquence pour éviter de demander au buzzer des sons trop graves ou trop aigus.
+        return max(self.min_frequency, min(self.max_frequency, frequency))
+
+    def play_note(self, note):
+        """Joue une seule note MIDI."""
+        # Conversion de la note MIDI en fréquence réelle.
+        frequency = self.note_to_frequency(note)
+
+        # Lecture de la fréquence avec le buzzer.
+        self.buzzer.play(Tone(frequency=frequency))
+
+    def stop(self):
+        """Arrête le son du buzzer."""
+        self.buzzer.stop()
+
+    def play_midi(self, midi_file_path):
+        """Lit un fichier MIDI et joue ses notes avec le buzzer."""
+        # Chargement du fichier MIDI avec la librairie mido.
+        mid = mido.MidiFile(midi_file_path)
+        print(f"Lecture du fichier bridée entre {self.min_frequency}Hz et {self.max_frequency}Hz...")
+
+        # mid.play() lit les messages MIDI en respectant les temps du fichier.
+        for msg in mid.play():
+            # Une note_on avec une vélocité supérieure à 0 signifie qu'une note commence.
+            if msg.type == "note_on" and msg.velocity > 0:
+                self.play_note(msg.note)
+
+            # Une note_off, ou une note_on avec vélocité 0, signifie que la note s'arrête.
+            elif msg.type == "note_off" or (msg.type == "note_on" and msg.velocity == 0):
+                self.stop()
+
+    def close(self):
+        """Libère proprement les ressources GPIO utilisées par le buzzer."""
+        # On arrête d'abord le buzzer pour éviter qu'un son reste bloqué.
+        self.stop()
+
+        # Puis on ferme l'objet gpiozero.
+        self.buzzer.close()
+
+    def __enter__(self):
+        """
+        Permet d'utiliser la classe avec un bloc 'with'.
+
+        Exemple:
+            with MidiBuzzer() as buzzer:
+                buzzer.play_midi("7.mid")
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Ferme automatiquement le buzzer à la fin d'un bloc 'with'."""
+        self.close()
+
+
 if __name__ == "__main__":
+    # Création du buzzer sur le GPIO 18.
+    buzzer = MidiBuzzer(pin=18, octaves=4)
+
     try:
-        play_midi("7.mid")
+        # Lecture du fichier MIDI nommé 7.mid.
+        buzzer.play_midi("7.mid")
+
     except KeyboardInterrupt:
-        tb.stop()
+        # Si l'utilisateur fait Ctrl+C, on arrête le buzzer proprement.
+        buzzer.stop()
+
+    finally:
+        # Dans tous les cas, on libère les ressources GPIO à la fin du programme.
+        buzzer.close()
