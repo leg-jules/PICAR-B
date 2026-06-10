@@ -15,7 +15,9 @@ class ServoController:
         min_pulse=500,
         max_pulse=2400,
         actuation_range=180,
-        offsets=None
+        offsets=None,
+        rotation_delay=0.001,
+        startup_center_channels=(0,)
     ):
         """
         Initialise le contrôleur PCA9685 et prépare la gestion des servos.
@@ -25,6 +27,10 @@ class ServoController:
         min_pulse / max_pulse : limites du signal PWM du servo
         actuation_range : plage d'angle du servo, généralement 180°
         offsets : dictionnaire contenant les offsets par canal
+        rotation_delay : temps d'attente entre chaque degré du mouvement
+                         Plus la valeur est grande, plus le servo tourne lentement.
+        startup_center_channels : canaux à mettre automatiquement à 90°
+                                  au démarrage du programme.
         """
 
         # Création du bus I2C avec les broches SCL et SDA du Raspberry Pi
@@ -37,10 +43,24 @@ class ServoController:
         # Dictionnaire pour stocker les servos déjà créés
         self.servos = {}
 
+        # Dictionnaire pour mémoriser le dernier angle envoyé à chaque servo
+        # Cela permet de ralentir le mouvement entre deux angles connus.
+        self.current_angles = {}
+
         # Paramètres des servos
         self.min_pulse = min_pulse
         self.max_pulse = max_pulse
         self.actuation_range = actuation_range
+
+        # Vitesse de rotation
+        # Le pas reste normal : 1 degré à la fois.
+        # Seul le délai entre chaque degré change.
+        self.rotation_delay = rotation_delay
+
+        # Canaux à centrer automatiquement au démarrage.
+        # Par défaut, on centre seulement le canal 0, qui gère la direction.
+        # Si tu veux centrer les canaux 0, 1 et 2, remplace par (0, 1, 2).
+        self.startup_center_channels = startup_center_channels
 
         # Offsets des servos
         # Par défaut, le canal 0 a un offset de 8°
@@ -66,12 +86,9 @@ class ServoController:
 
         return self.servos[channel]
 
-    def set_angle(self, channel, angle):
+    def apply_offset(self, channel, angle):
         """
-        Définit l'angle d'un servo en appliquant l'offset du canal.
-
-        channel : canal du PCA9685
-        angle : angle demandé par l'utilisateur
+        Applique l'offset du canal et limite l'angle entre 0° et 180°.
         """
 
         # Récupération de l'offset du canal
@@ -84,14 +101,93 @@ class ServoController:
         # Sécurité : on bloque l'angle entre 0° et 180°
         corrected_angle = max(0, min(180, corrected_angle))
 
-        # Récupération du servo puis envoi de l'angle corrigé
+        return corrected_angle
+
+    def move_servo_with_speed(self, channel, corrected_angle):
+        """
+        Déplace le servo vers l'angle corrigé avec une vitesse contrôlée.
+
+        Le pas reste fixe à 1°.
+        Pour changer la vitesse, on change seulement le délai entre chaque degré.
+        """
+
         selected_servo = self.get_servo(channel)
-        selected_servo.angle = corrected_angle
+
+        # Si c'est le premier mouvement de ce servo, on ne connaît pas sa position réelle.
+        # On envoie donc directement le premier angle demandé.
+        if channel not in self.current_angles:
+            selected_servo.angle = corrected_angle
+            self.current_angles[channel] = corrected_angle
+            return
+
+        start_angle = self.current_angles[channel]
+        target_angle = corrected_angle
+
+        # Si le délai est à 0, le mouvement devient instantané.
+        if self.rotation_delay <= 0:
+            selected_servo.angle = target_angle
+            self.current_angles[channel] = target_angle
+            return
+
+        # Détermine si on doit augmenter ou diminuer l'angle.
+        direction = 1 if target_angle > start_angle else -1
+
+        # Déplacement degré par degré.
+        # Le pas est donc toujours normal : 1°.
+        angle = start_angle
+        while angle != target_angle:
+            angle += direction
+            selected_servo.angle = angle
+            time.sleep(self.rotation_delay)
+
+        self.current_angles[channel] = target_angle
+
+    def set_angle(self, channel, angle):
+        """
+        Définit l'angle d'un servo en appliquant l'offset du canal,
+        puis en contrôlant la vitesse de rotation.
+
+        channel : canal du PCA9685
+        angle : angle demandé par l'utilisateur
+        """
+
+        # Calcul de l'angle corrigé avec l'offset
+        corrected_angle = self.apply_offset(channel, angle)
+
+        # Déplacement vers l'angle corrigé avec vitesse contrôlée
+        self.move_servo_with_speed(channel, corrected_angle)
 
         print(
             f"Servo sur le canal {channel} demandé à {angle}° "
             f"-> envoyé à {corrected_angle}°"
         )
+
+    def center_servos_on_startup(self):
+        """
+        Place automatiquement les servos choisis à 90° au démarrage
+        """
+
+        if not self.startup_center_channels:
+            return
+
+        print("Mise au centre des servos au démarrage...")
+
+        for channel in self.startup_center_channels:
+            corrected_angle = self.apply_offset(channel, 90)
+            selected_servo = self.get_servo(channel)
+            selected_servo.angle = corrected_angle
+
+            # On mémorise l'angle corrigé pour que les prochains mouvements
+            # puissent être ralentis dès la première commande utilisateur.
+            self.current_angles[channel] = corrected_angle
+
+            print(
+                f"Servo sur le canal {channel} placé à 90° "
+                f"-> envoyé à {corrected_angle}°"
+            )
+
+        time.sleep(0.5)
+        print()
 
     def ask_int(self, message, minimum, maximum):
         """
@@ -120,6 +216,74 @@ class ServoController:
 
             return value
 
+    def ask_float(self, message, minimum, maximum, default=None):
+        """
+        Demande une valeur décimale à l'utilisateur.
+
+        Si l'utilisateur appuie juste sur Entrée, la valeur par défaut est utilisée.
+        Retourne None si l'utilisateur tape q, quit ou exit.
+        """
+
+        while True:
+            value = input(message).strip()
+
+            # Permet de quitter le programme
+            if value.lower() in ["q", "quit", "exit"]:
+                return None
+
+            # Permet d'utiliser la valeur par défaut
+            if value == "" and default is not None:
+                return default
+
+            try:
+                value = float(value)
+            except ValueError:
+                print("Entrer une valeur valide.")
+                continue
+
+            # Vérifie que la valeur est dans la plage autorisée
+            if value < minimum or value > maximum:
+                print(f"Entrer une valeur entre {minimum} et {maximum}.")
+                continue
+
+            return value
+
+    def configure_speed(self):
+        """
+        Permet à l'utilisateur de choisir uniquement la vitesse du mouvement.
+
+        Le pas reste toujours de 1°.
+
+        Exemples :
+        - 0.01 : assez rapide
+        - 0.03 : plus lent
+        - 0.05 : très lent
+        - 0 : instantané
+        """
+
+        print("Réglage de la vitesse du mouvement")
+        print("Le pas reste normal : 1° à la fois.")
+        print("Appuie sur Entrée pour garder la valeur par défaut.")
+        print()
+
+        delay = self.ask_float(
+            f"Délai entre chaque degré en secondes "
+            f"(défaut {self.rotation_delay}, 0 = instantané): ",
+            0,
+            1,
+            self.rotation_delay
+        )
+
+        if delay is None:
+            return False
+
+        self.rotation_delay = delay
+
+        print(f"Vitesse réglée : 1° toutes les {self.rotation_delay} secondes.")
+        print()
+
+        return True
+
     def run(self):
         """
         Lance le mode interactif pour piloter les servos.
@@ -129,6 +293,14 @@ class ServoController:
         print("Taper q pour quitter.")
         print()
 
+        # Au démarrage, on place le ou les servos choisis à 90°.
+        # Cela donne une position connue au programme avant les commandes utilisateur.
+        self.center_servos_on_startup()
+
+        # Demande la vitesse une seule fois au lancement du programme
+        if not self.configure_speed():
+            return
+
         while True:
             # Demande du canal servo
             channel = self.ask_int("Canal du Servo 0-2: ", 0, 2)
@@ -136,7 +308,7 @@ class ServoController:
             if channel is None:
                 break
 
-            # Le servo de direction sur le canal 0 est limité entre 40° et 140°
+            # Le servo de direction sur le canal 0 est limité entre 45° et 135°
             if channel == 0:
                 angle = self.ask_int("Angle 45-135: ", 45, 135)
             else:
@@ -161,6 +333,13 @@ class ServoController:
 
 
 if __name__ == "__main__":
+    # Tu peux aussi régler la vitesse ici directement.
+    # Exemple plus lent :
+    # controller = ServoController(rotation_delay=0.05)
+    #
+    # Par défaut, le canal 0 est placé à 90° au démarrage.
+    # Pour centrer les canaux 0, 1 et 2 au démarrage :
+    # controller = ServoController(startup_center_channels=(0, 1, 2))
     controller = ServoController()
 
     try:
