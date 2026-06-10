@@ -138,7 +138,7 @@ class ServoController:
 
             # Le servo de direction sur le canal 0 est limité entre 40° et 140°
             if channel == 0:
-                angle = self.ask_int("Angle 40-140: ", 40, 140)
+                angle = self.ask_int("Angle 45-135: ", 45, 135)
             else:
                 angle = self.ask_int("Angle 0-180: ", 0, 180)
 
