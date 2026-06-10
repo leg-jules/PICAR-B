@@ -3,41 +3,47 @@ from time import sleep
 
 
 class UltrasonicSensor:
-    def __init__(self, trigger_pin=23, echo_pin=24, max_distance=2):
+    def __init__(self, trigger_pin=23, echo_pin=24, max_distance=2) -> None:
         """
         Initialise le capteur ultrason.
-
-        trigger_pin : broche GPIO connectée à Trig
-        echo_pin : broche GPIO connectée à Echo
-        max_distance : distance maximale de détection en mètres
+        :param trigger_pin (int) : broche GPIO connectée à Trig
+        :param echo_pin (int) : broche GPIO connectée à Echo
+        :param max_distance (float) : distance maximale de détection en mètres
         """
+
         self.sensor = DistanceSensor(
             echo=echo_pin,
             trigger=trigger_pin,
             max_distance=max_distance
         )
 
-    def get_distance_mm(self):
+
+    def get_distance_mm(self) -> float:
         """
         Retourne la distance mesurée en millimètres.
+        :return (float): distance en millimètres
         """
+
         return self.sensor.distance * 1000
 
-    def print_distance_loop(self, delay=0.05):
+
+    def print_distance_loop(self, delay=0.05) -> None:
         """
         Affiche en continu la distance mesurée en millimètres.
-
-        delay : temps d'attente entre chaque mesure, en secondes
+        :param delay (float) : temps d'attente entre chaque mesure, en secondes
         """
+
         while True:
             distance = self.get_distance_mm()
             print(f"{distance:.2f} mm")
             sleep(delay)
 
-    def close(self):
+
+    def close(self) -> None:
         """
         Libère proprement les ressources GPIO utilisées par le capteur.
         """
+
         self.sensor.close()
 
 

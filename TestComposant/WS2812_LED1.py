@@ -3,6 +3,7 @@ from rpi_ws281x import *
 
 class LED:
     def __init__(self):
+        
         self.LED_COUNT = 14 # Nombre total de LEDs sur le robot (peut être supérieur au nombre de LEDs connectées directement au Raspberry Pi)
         self.LED_PIN = 10 # Broche GPIO utilisée pour le signal
         self.LED_FREQ_HZ = 800000 # Fréquence du signal des LEDs en Hertz (généralement 800 kHz)
@@ -19,10 +20,15 @@ class LED:
         self.strip.begin()
 
     # Choisir une couleur pour toutes les LEDs (effet de balayage/remplissage)
-    def colorWipe(self, R, G, B):
+    def colorWipe(self, R, G, B) -> None:
         """
         Cette fonction permet de changer la couleur de l'ensemble du bandeau LED.
+        :param R (int): Intensité de la composante rouge (0-255)
+        :param G (int): Intensité de la composante verte (0-255)
+        :param B (int): Intensité de la composante bleue (0-255)
+        :return (None):
         """
+
         color = Color(R, G, B)
         for i in range(self.strip.numPixels()):
             # On ne peut configurer qu'une seule LED à la fois, une boucle est donc nécessaire
@@ -30,8 +36,15 @@ class LED:
             self.strip.show() # Le changement de couleur ne devient réel qu'après l'appel de la méthode show()
             # Ce code va contrôler toutes les lumières WS2812. Appuyez sur CTRL+C pour quitter le programme.
 
+
     # Choisir l'intensité globale des LEDs
-    def setBrightness(self, brightness):
+    def setBrightness(self, brightness) -> None:
+        """
+        Cette fonction permet de changer l'intensité globale des LEDs.
+        :param brightness (int): Intensité de la luminosité (0-255)
+        :return (None):
+        """
+
         # La luminosité doit obligatoirement être comprise entre 0 et 255
         if brightness < 0:
             brightness = 0
@@ -41,8 +54,19 @@ class LED:
         self.strip.setBrightness(brightness)
         self.strip.show()
 
+
     # Choisir la couleur d'une seule LED
-    def setLedColor(self, led_number, R, G, B): 
+    def setLedColor(self, led_number, R, G, B) -> None:
+        """
+        Cette fonction permet de changer la couleur d'une seule LED du bandeau.
+        :param led_number (int): Numéro de la LED à configurer (0 pour
+        la première LED, 1 pour la deuxième, etc.)
+        :param R (int): Intensité de la composante rouge (0-255)
+        :param G (int): Intensité de la composante verte (0-255)
+        :param B (int): Intensité de la composante bleue (0-255
+        :return (None):
+        """
+        
         # Vérifie que le numéro de la LED demandé est valide
         if led_number < 0 or led_number >= self.strip.numPixels():
             print("Erreur : numéro de LED invalide")
@@ -57,8 +81,19 @@ class LED:
         # Envoie et applique le changement physiquement aux LEDs
         self.strip.show()
 
+
     # Choisir la couleur et l'intensité d'une seule LED
-    def setPixelColorRGB(self, led_number, R, G, B, brightness):
+    def setPixelColorRGB(self, led_number, R, G, B, brightness) -> None:
+        """
+        Cette fonction permet de changer la couleur et l'intensité d'une seule LED du bandeau.
+        :param led_number (int): Numéro de la LED à configurer (0 pour la première LED, 1 pour la deuxième, etc.)
+        :param R (int): Intensité de la composante rouge (0-255)
+        :param G (int): Intensité de la composante verte (0-255)
+        :param B (int): Intensité de la composante bleue (0-255)
+        :param brightness (int): Intensité de la luminosité (0-255)
+        :return (None):
+        """
+
         # Vérifie que le numéro de la LED demandé est valide
         if led_number < 0 or led_number >= self.strip.numPixels():
             print("Erreur : numéro de LED invalide")
