@@ -41,6 +41,7 @@ class Motor:
 			self.current_direction = [1]
 			self.target_speed = [0]
 			self.target_direction = [1] 
+			self.pentes = [1]
 			self.nb_motors = len(self.motors)
 			self.time = time.time()
 
@@ -58,16 +59,15 @@ class Motor:
 		new_speed = max(0, min(new_speed, 100))
 		self.target_speed[channel-1] = new_speed
 		self.target_direction[channel-1] = new_direction
-		self.transition(channel, pente)
+		self.pentes[channel-1] = pente
 		
     	
 
 
-	def transition(self, channel, pente) -> None:
-		""""
+	def transition(self, channel) -> None:
+		"""
 		Effectue une transition progressive de la vitesse actuelle à la vitesse cible en fonction de la pente spécifiée.
 		:param channel (int): Numéro du moteur entre 1 et le nombre de moteurs disponibles
-		:param pente (float): (default=1) Plus la pente est faible, plus la transition est lente EX: 0.5 pour une transition en 2 secondes, 1 pour une transition en 1 seconde
 		"""
 
 		# Vérification de la validité du canal
@@ -79,13 +79,13 @@ class Motor:
 		
 		# Calcul de la durée:
 		diff_vitesse = abs(v_target - v_current)
-		duree_pas = (1.0 / pente *100) # la duree est en secondes 
+		duree_pas = (1.0 / self.pentes[channel-1] *100) # la duree est en secondes 
 		delta_time = time.time() - self.time
 		
 		if (diff_vitesse == 0) or (delta_time < duree_pas):
 			return
 		else:
-			v_actuelle = v_current + (v_target - v_current) * min((delta_time / duree_pas), 1)
+			v_actuelle = v_current + min((delta_time / duree_pas), diff_vitesse) * (1 if v_target > v_current else -1)
 			throttle = map(v_actuelle, -100, 100, -1.0, 1.0)
 			self.motors[channel-1].throttle = max(-1.0, min(throttle, 1.0))		
 			
@@ -94,6 +94,13 @@ class Motor:
 			self.current_direction[channel-1] = self.target_direction[channel-1]
 			self.time = time.time()
 
+	def update(self) -> None:
+		"""
+		Mets à jour la vitesse de tous les moteurs en fonction de leurs vitesses cibles et des pentes spécifiées.
+		Doit être appelé régulièrement dans la boucle principale pour assurer des transitions fluides.
+		"""
+		for i in range(self.nb_motors):
+			self.transition(i+1)
 
 	# Arrêt progressif du moteur
 	def motorStop(self, channel=None, pente=1) -> None:
@@ -145,7 +152,7 @@ class Motor:
 	
 
 	# Mise à jour de la vitesse et de la direction pour tous les moteurs
-	def setAllSpeeds(self, new_direction, new_speed, pente=100) -> None:
+	def setAllSpeeds(self, new_direction, new_speed, pente=1) -> None:
 		"""
 		Mets à jour la vitesse et la direction de tous les moteurs simultanément.
 		:param new_direction (int): 1 pour avancer, -1 pour reculer
