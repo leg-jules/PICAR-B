@@ -168,7 +168,7 @@ class Motor:
 		"""
 		Arrête immédiatement tous les moteurs et libère les ressources matérielles.
 		"""
-		self.motorStop(10)
+		self.motorStop(pente=10)
 		self.pwm_motor.deinit()
 		self.i2c.deinit()
 	
