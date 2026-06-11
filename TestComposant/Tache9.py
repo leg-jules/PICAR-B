@@ -158,9 +158,9 @@ def hazard_lights_on_step():
         led_control.switch_hat_led(13, 1)
 
         # LED RGB avant gauche et droite en rouge
-        led_control.switch_rgb_led(14, 1)  # left_R
+        led_control.switch_rgb_led(14, 0)  # left_B
         led_control.switch_rgb_led(15, 0)  # left_G
-        led_control.switch_rgb_led(16, 0)  # left_B
+        led_control.switch_rgb_led(16, 1)  # left_R
 
         led_control.switch_rgb_led(17, 1)  # right_R
         led_control.switch_rgb_led(18, 0)  # right_G
