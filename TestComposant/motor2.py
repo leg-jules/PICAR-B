@@ -39,7 +39,10 @@ class Motor:
 			self.motors = [self.motor1]
 			self.current_speed = [0]
 			self.current_direction = [1]
+			self.target_speed = [0]
+			self.target_direction = [1] 
 			self.nb_motors = len(self.motors)
+			self.time = time.time()
 
 
 	def setSpeed(self, new_direction, new_speed, pente=1, channel=1) -> None:
@@ -53,15 +56,17 @@ class Motor:
 
 		# Sécurisation des limites de vitesse entre 0 et 100
 		new_speed = max(0, min(new_speed, 100))
-		self.transition(channel, new_speed, new_direction, pente)
+		self.target_speed[channel-1] = new_speed
+		self.target_direction[channel-1] = new_direction
+		self.transition(channel, pente)
+		
+    	
 
 
-	def transition(self, channel, target_speed, target_direction, pente) -> None:
+	def transition(self, channel, pente) -> None:
 		""""
 		Effectue une transition progressive de la vitesse actuelle à la vitesse cible en fonction de la pente spécifiée.
 		:param channel (int): Numéro du moteur entre 1 et le nombre de moteurs disponibles
-		:param target_speed (int): Vitesse cible entre 0 et 100
-		:param target_direction (int): Direction cible (1 pour avancer, -1 pour reculer)
 		:param pente (float): (default=1) Plus la pente est faible, plus la transition est lente EX: 0.5 pour une transition en 2 secondes, 1 pour une transition en 1 seconde
 		"""
 
@@ -70,29 +75,24 @@ class Motor:
 			return
 		
 		v_current = self.current_speed[channel-1] * self.current_direction[channel-1]
-		v_target = target_speed * target_direction
+		v_target = self.target_speed[channel-1] * self.target_direction[channel-1]
 		
 		# Calcul de la durée:
 		diff_vitesse = abs(v_target - v_current)
-		duree_totale = (diff_vitesse / 100.0) * (1.0 / pente)
+		duree_pas = (1.0 / pente *100)
+		delta_time = time.time() - self.time
 		
-		pas_temps = 0.01 # 10 millisecondes
-		nb_steps = int(duree_totale / pas_temps)
-		
-		if nb_steps > 0:
-			for i in range(1, nb_steps + 1):
-				v_actuelle = v_current + (v_target - v_current) * (i / nb_steps)
-				throttle = map(v_actuelle, -100, 100, -1.0, 1.0)
-				self.motors[channel-1].throttle = max(-1.0, min(throttle, 1.0))
-				time.sleep(pas_temps)
-
-		# Valeur finale
-		final_throttle = map(v_target, -100, 100, -1.0, 1.0)
-		self.motors[channel-1].throttle = max(-1.0, min(final_throttle, 1.0))
-		
-		# Mise à jour de la vitesse et de la direction actuelles
-		self.current_speed[channel-1] = target_speed
-		self.current_direction[channel-1] = target_direction
+		if diff_vitesse == 0 or delta_time < duree_pas:
+			return
+		else:
+			v_actuelle = v_current + (v_target - v_current) * min((delta_time / duree_pas), 1)
+			throttle = map(v_actuelle, -100, 100, -1.0, 1.0)
+			self.motors[channel-1].throttle = max(-1.0, min(throttle, 1.0))		
+			
+			# Mise à jour de la vitesse et de la direction actuelles
+			self.current_speed[channel-1] = abs(v_actuelle)
+			self.current_direction[channel-1] = self.target_direction[channel-1]
+			self.time = time.time()
 
 
 	# Arrêt progressif du moteur
@@ -105,9 +105,9 @@ class Motor:
 
 		if channel is None:
 			for i in range(len(self.motors)):
-				self.transition(i+1, 0, 1, pente)
+				self.setSpeed(1, 0, pente, channel=i+1)
 		else:
-			self.transition(channel, 0, 1, pente)
+			self.setSpeed(1, 0, pente, channel=channel)
 
 
 	# Récupération de la vitesse actuelle
