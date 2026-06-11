@@ -79,10 +79,10 @@ class Motor:
 		
 		# Calcul de la durée:
 		diff_vitesse = abs(v_target - v_current)
-		duree_pas = (1.0 / pente *100)
+		duree_pas = (1.0 / pente *100) # la duree est en secondes 
 		delta_time = time.time() - self.time
 		
-		if diff_vitesse == 0 or delta_time < duree_pas:
+		if (diff_vitesse == 0) or (delta_time < duree_pas):
 			return
 		else:
 			v_actuelle = v_current + (v_target - v_current) * min((delta_time / duree_pas), 1)
