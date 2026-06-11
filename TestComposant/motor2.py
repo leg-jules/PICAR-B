@@ -6,6 +6,7 @@ import busio
 from adafruit_pca9685 import PCA9685
 from adafruit_motor import motor
 import numpy as np
+import curses
 
 # motor_EN_A: Pin7 | motor_EN_B: Pin11
 # motor_A: Pin8,Pin10 | motor_B: Pin13,Pin12
@@ -61,7 +62,7 @@ class Motor:
 		self.target_direction[channel-1] = new_direction
 		self.pentes[channel-1] = pente
 		
-    	
+		
 
 
 	def transition(self, channel) -> None:
@@ -79,7 +80,7 @@ class Motor:
 		
 		# Calcul de la durée:
 		diff_vitesse = abs(v_target - v_current)
-		duree_pas = (1.0 / self.pentes[channel-1] *100) # la duree est en secondes 
+		duree_pas = (1.0 / (self.pentes[channel-1] *100)) # la duree est en secondes 
 		delta_time = time.time() - self.time
 		
 		if (diff_vitesse == 0) or (delta_time < duree_pas):
@@ -195,24 +196,67 @@ if __name__ == '__main__':
 		print("Initialisation du moteur...")
 		mot = Motor()
 		
-		print("Accélération avant (50%) en 1 seconde...")
-		mot.setSpeed(1, 50, pente=0.5, channel=1)
-		time.sleep(2)
-		
-		print("Transition vers la marche arrière (50%) en 2 secondes...")
-		mot.setSpeed(-1, 50, pente=0.5, channel=1)
-		time.sleep(2)
-		
-		print("Vitesse actuelle lue :", mot.getSpeed(1))
-		
-		print("Arrêt progressif...")
-		mot.motorStop(channel=1, pente=0.5)
-		
+		# Initialisation de la fenêtre de capture clavier
+		stdscr = curses.initscr()
+		curses.noecho()
+		curses.cbreak()
+		stdscr.keypad(True)
+		stdscr.nodelay(True) # Empêche getch() de bloquer le code
+
+		print("\n=== Contrôle du Moteur ===")
+		print("Flèche Haut   : Configurer Marche Avant (direction = 1)")
+		print("Flèche Bas    : Configurer Marche Arrière (direction = -1)")
+		print("Espace        : Accélérer (+10% de vitesse cible)")
+		print("Touche 's'    : Arrêt progressif (Stop)")
+		print("Touche 'q'    : Quitter")
+		print("==========================\n")
+
+		vitesse_cible = 0
+		direction_cible = 1
+
+		while True:
+			# Appel impératif et constant de la mise à jour des moteurs
+			mot.update()
+			
+			# Capture de la touche pressée
+			key = stdscr.getch()
+
+			if key == ord('q'):
+				break
+				
+			elif key == curses.KEY_UP:
+				direction_cible = 1
+				mot.setSpeed(direction_cible, vitesse_cible, pente=1.0, channel=1)
+				print(f"Direction configurée : AVANT | Vitesse actuelle cible : {vitesse_cible}%")
+				
+			elif key == curses.KEY_DOWN:
+				direction_cible = -1
+				mot.setSpeed(direction_cible, vitesse_cible, pente=1.0, channel=1)
+				print(f"Direction configurée : ARRIÈRE | Vitesse actuelle cible : {vitesse_cible}%")
+				
+			elif key == ord(' '):
+				vitesse_cible = min(vitesse_cible + 10, 100)
+				mot.setSpeed(direction_cible, vitesse_cible, pente=1.0, channel=1)
+				print(f"Accélération -> Vitesse cible : {vitesse_cible}% (Direction: {direction_cible})")
+				
+			elif key == ord('s'):
+				vitesse_cible = 0
+				mot.motorStop(channel=1, pente=1.0)
+				print("Arrêt progressif demandé.")
+
+			# Petite pause pour soulager le processeur (10ms)
+			time.sleep(0.01)
+
 	except KeyboardInterrupt:
 		print("\nInterruption clavier détectée.")
 	finally:
+		# Restauration obligatoire du terminal standard
+		curses.nocbreak()
+		stdscr.keypad(False)
+		curses.echo()
+		curses.endwin()
+		
 		if mot:
 			print("Extinction du système et libération du bus I2C.")
 			mot.destroy()
-
 
