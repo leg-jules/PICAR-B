@@ -1,9 +1,10 @@
 import time
 import smbus
 from pilotage_servo import ServoController
-from tache9 import all
-from motor2 import Motor
+from motor2 import Motor, Dir_forward
 from distance_ultrasons import UltrasonicSensor
+import led_control
+
 class ADS7830(object):
 	def __init__(self):
 		self.cmd = 0x84
@@ -22,31 +23,95 @@ class ADS7830(object):
 		angle2 = int(max(40.0, min(140.0, angle)))
 		return angle2 
 
-if __name__ == "__main__":
+def obstacle_detected():
 	try:
-		adc = ADS7830()
-		controller = ServoController()
-		motor_controller = Motor()
-		motor_controller.setSpeed(1,10)
-		setup()
-		while True:
-			# Simplification : analogtoangle s'occupe déjà de lire le canal 1 par défaut
-			adc_angle = adc.analogtoangle(chn=1) 
-			controller.set_angle(0, adc_angle)
-			
+		distance = ultrasonic_sensor.get_distance_mm()
+		print(f"Distance : {distance:.1f} mm")
+		return distance < OBSTACLE_LIMIT_MM
+	except Exception as e:
+		print("Erreur capteur ultrason :", e)
+		return False
+	
+if __name__ == "__main__":
+	OBSTACLE_LIMIT_MM  = 200
+	MOTOR_SPEED        = 20
+	ACCEL_PENTE        = 1.0
+	DECEL_PENTE        = 2.0
+	MOTOR_CHANNEL      = 1
+	HAZARD_BLINK_DELAY = 0.4
 
+	# --- Initialisation ---
+	adc              = ADS7830()
+	controller       = ServoController()
+	motor_controller = Motor()
+
+	ultrasonic_sensor = UltrasonicSensor(
+		trigger_pin=23,
+		echo_pin=24,
+		max_distance=2
+	)
+
+	led_control.switchSetup()
+
+	robot_running     = False
+	hazard_active     = False
+	hazard_state      = False
+	last_hazard_blink = 0
+
+	motor_controller.setSpeed(Dir_forward, MOTOR_SPEED,
+							   pente=ACCEL_PENTE, channel=MOTOR_CHANNEL)
+	robot_running = True
+
+	try:
+		while True:
+
+			# --- 1. Light tracking ---
+			adc_angle = adc.analogtoangle(chn=1)
+			controller.set_angle(0, adc_angle)
+
+			# --- 2. Gestion obstacle ---
 			if obstacle_detected():
-				print("Obstacle detected! Stopping motors.")
-			"""
-			
+				if robot_running:
+					print("Obstacle détecté ! Arrêt.")
+					motor_controller.setSpeed(Dir_forward, 0,
+											   pente=DECEL_PENTE,
+											   channel=MOTOR_CHANNEL)
+					robot_running     = False
+					hazard_active     = True
+					hazard_state      = False
+					last_hazard_blink = 0
 			else:
-				# Paramètres corrects : direction=1 (avant), vitesse=20, pente=1, canal=1
-				motor_controller.setSpeed(1, 20, pente=1.0, channel=1)
-				
-			
-			"""
+				if not robot_running:
+					print("Voie libre — reprise.")
+					motor_controller.setSpeed(Dir_forward, MOTOR_SPEED,
+											   pente=ACCEL_PENTE,
+											   channel=MOTOR_CHANNEL)
+					robot_running = True
+					hazard_active = False
+					led_control.set_all_switch_off()
+
+			# --- 3. Clignotement feux (non-bloquant) ---
+			if hazard_active:
+				now = time.time()
+				if now - last_hazard_blink >= HAZARD_BLINK_DELAY:
+					last_hazard_blink = now
+					hazard_state = not hazard_state
+					if hazard_state:
+						led_control.switch_hat_led(11, 1)
+						led_control.switch_hat_led(12, 1)
+						led_control.switch_hat_led(13, 1)
+					else:
+						led_control.set_all_switch_off()
+
+			# --- 4. Mise à jour moteur ---
 			motor_controller.update()
-			# Indispensable pour éviter l'erreur I2C "Remote I/O error"
 			time.sleep(0.02)
+
 	except KeyboardInterrupt:
 		print("\nInterruption clavier détectée.")
+
+	finally:
+		motor_controller.motorStop(MOTOR_CHANNEL)
+		led_control.set_all_switch_off()
+		ultrasonic_sensor.close()
+		print("Nettoyage terminé.")
