@@ -33,7 +33,7 @@ class Motor:
 			# Initialisation matérielle
 			self.i2c = busio.I2C(SCL, SDA)
 			self.pwm_motor = PCA9685(self.i2c, address=0x5f)
-			self.pwm_motor.frequency = 1000
+			self.pwm_motor.frequency = 50
 			
 			self.motor1 = motor.DCMotor(self.pwm_motor.channels[MOTOR_M1_IN1], self.pwm_motor.channels[MOTOR_M1_IN2])
 			self.motor1.decay_mode = motor.SLOW_DECAY 
@@ -114,9 +114,15 @@ class Motor:
 		if channel is None:
 			for i in range(len(self.motors)):
 				self.setSpeed(1, 0, pente, channel=i+1)
+				while any(speed > 0 for speed in self.current_speed):
+					self.update()
+					time.sleep(0.001) # Petite pause pour soulager le processeur
+
 		else:
 			self.setSpeed(1, 0, pente, channel=channel)
-
+			while self.current_speed[channel-1] > 0:
+				self.update()
+				time.sleep(0.001) # Petite pause pour soulager le processeur
 
 	# Récupération de la vitesse actuelle
 	def getSpeed(self, channel = None) -> int:
