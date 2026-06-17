@@ -119,7 +119,7 @@ class LineFollower:
 
                 print(" -> OBSTACLE")
 
-                self.r.()
+                self.r.stop()
                 continue
 
             # =================================================
@@ -197,7 +197,7 @@ class LineFollower:
               
                 #self.lost_counter += 1
 
-                if ((75<escape_angle) and (escape_angle < 115)):
+                if ((75 < self.r.last_dir < 115)):
                  #self.lost_counter < self.MAX_LOST:
 
                     print(" -> Survol trou")
