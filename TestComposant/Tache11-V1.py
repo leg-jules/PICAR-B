@@ -37,13 +37,13 @@ class LineFollower:
         self.r = Robot()
 
     def recover(self):
-        # 1. ARRÊT TOTAL IMMÉDIAT
+        # 1. ARReT TOTAL IMMeDIAT
         self.r.stop() 
-        print(" -> [OBSTACLE] Arrêt d'urgence détecté !")
+        print(" -> [OBSTACLE] Arret d'urgence detecte !")
         
         self.r.set_leds("RED")
         
-        # 2. Séquence de recul et réalignement
+        # 2. Sequence de recul et realignement
         escape_angle = 40 if self.r.last_dir > 90 else 140
         self.r.steer(escape_angle)
         
@@ -57,16 +57,16 @@ class LineFollower:
 
     def run(self):
         SPEED = 0.20
-        print("Suivi de ligne actif. Priorité Obstacle activée.")
+        print("Suivi de ligne actif. Priorite Obstacle activee.")
         while True:
             # LECTURE PRIORITAIRE
             dist = self.r.dist.distance
             L, M, R = self.r.L.value, self.r.M.value, self.r.R.value
             
-            # SÉCURITÉ ABSOLUE (Obstacle)
-            if dist < 0.20 and dist > 0.0: # dist > 0 évite les erreurs de lecture capteur à 0
+            # SeCURITe ABSOLUE (Obstacle)
+            if dist < 0.20 and dist > 0.0: # dist > 0 evite les erreurs de lecture capteur a 0
                 self.recover()
-                continue # Force le redémarrage de la boucle après le recul
+                continue # Force le redemarrage de la boucle apres le recul
             
             # Logique de suivi
             print(f"Capteurs: ({L}, {M}, {R}) | Dist: {dist:.2f}m")
@@ -96,7 +96,7 @@ class LineFollower:
             L, M, R = self.r.L.value, self.r.M.value, self.r.R.value
             print(f"Capteurs: ({L}, {M}, {R}) | Dir: {self.r.last_dir}")
 
-            # Sécurité Obstacle
+            # Securite Obstacle
             if self.r.dist.distance < 0.20:
                 print(" -> [OBSTACLE] Recul d'urgence")
                 self.recover()
