@@ -45,7 +45,8 @@ class ServoController:
 
         # Dictionnaire pour mémoriser le dernier angle envoyé à chaque servo
         # Cela permet de ralentir le mouvement entre deux angles connus.
-        self.current_angles = {}
+        self.current_angles = [90,90,90]
+        self.target_angles = [None,None,None]
 
         # Paramètres des servos
         self.min_pulse = min_pulse
@@ -67,6 +68,9 @@ class ServoController:
         self.offsets = offsets if offsets is not None else {
             0: 8,  # Offset pour le servo canal 0 qui gère la direction
         }
+
+        self.last_servo_time = [time.time(), time.time(),time.time()]
+        
 
     def get_servo(self, channel):
         """
@@ -103,44 +107,55 @@ class ServoController:
 
         return corrected_angle
 
+    
     def move_servo_with_speed(self, channel, corrected_angle):
-        """
-        Déplace le servo vers l'angle corrigé avec une vitesse contrôlée.
-
-        Le pas reste fixe à 1°.
-        Pour changer la vitesse, on change seulement le délai entre chaque degré.
-        """
-
+        """Déplace le servo de façon asynchrone basé sur le temps écoulé."""
         selected_servo = self.get_servo(channel)
 
-        # Si c'est le premier mouvement de ce servo, on ne connaît pas sa position réelle.
-        # On envoie donc directement le premier angle demandé.
+        # Premier mouvement : initialisation immédiate
         if channel not in self.current_angles:
             selected_servo.angle = corrected_angle
             self.current_angles[channel] = corrected_angle
+            self.last_servo_time[channel] = time.time()
+            print("init angle")
             return
 
         start_angle = self.current_angles[channel]
         target_angle = corrected_angle
+        self.target_angles[channel] = corrected_angle
+        if start_angle == target_angle:
+            return
 
-        # Si le délai est à 0, le mouvement devient instantané.
+        # Mouvement instantané si aucun délai n'est configuré
         if self.rotation_delay <= 0:
             selected_servo.angle = target_angle
             self.current_angles[channel] = target_angle
             return
 
-        # Détermine si on doit augmenter ou diminuer l'angle.
-        direction = 1 if target_angle > start_angle else -1
+        now = time.time()
+        last_time = self.last_servo_time[channel]
+        delta_time = now - last_time
+        
+        if delta_time >= self.rotation_delay:
+            # Calcul du déplacement proportionnel (ex: si rotation_delay = 0.1s pour 1°, alors 1s = 10°)
+            pas_par_seconde = 1.0 / self.rotation_delay
+            deplacement = delta_time * pas_par_seconde
+            
+            direction = 1 if target_angle > start_angle else -1
+            next_angle = start_angle + (direction * deplacement)
+            
+            # Sécurité : Évite de dépasser la cible (overshoot)
+            if (direction == 1 and next_angle >= target_angle) or (direction == -1 and next_angle <= target_angle):
+                next_angle = target_angle
 
-        # Déplacement degré par degré.
-        # Le pas est donc toujours normal : 1°.
-        angle = start_angle
-        while angle != target_angle:
-            angle += direction
-            selected_servo.angle = angle
-            time.sleep(self.rotation_delay)
-
-        self.current_angles[channel] = target_angle
+            selected_servo.angle = next_angle
+            self.current_angles[channel] = next_angle
+            self.last_servo_time[channel] = now
+    
+    def update(self):
+        for i in range(0,3):
+            if self.target_angles[i] != None:
+                self.move_servo_with_speed(self, i,self.target_angles[i])
 
     def set_angle(self, channel, angle):
         """
@@ -156,11 +171,15 @@ class ServoController:
 
         # Déplacement vers l'angle corrigé avec vitesse contrôlée
         self.move_servo_with_speed(channel, corrected_angle)
-
+        """
         print(
             f"Servo sur le canal {channel} demandé à {angle}° "
             f"-> envoyé à {corrected_angle}°"
         )
+        """
+    def print_angle(self, channel):
+        print(f"Servo sur le canal {channel} à pour angle {self.current_angles[channel]}")
+        return
 
     def center_servos_on_startup(self):
         """
@@ -248,7 +267,7 @@ class ServoController:
 
             return value
 
-    def configure_speed(self):
+    def configure_speed(self, delay=None):
         """
         Permet à l'utilisateur de choisir uniquement la vitesse du mouvement.
 
@@ -260,7 +279,10 @@ class ServoController:
         - 0.05 : très lent
         - 0 : instantané
         """
-
+        if delay is not None:
+            if delay >= 0 and delay <= 1:
+                self.rotation_delay = delay
+                return
         print("Réglage de la vitesse du mouvement")
         print("Le pas reste normal : 1° à la fois.")
         print("Appuie sur Entrée pour garder la valeur par défaut.")
